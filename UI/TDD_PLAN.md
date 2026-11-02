@@ -1,6 +1,6 @@
 # UI test-driven development plan
 
-This plan implements `DESIGN.md`. Application implementation is a subsequent task; no tests or framework are installed by this documentation change.
+This plan implements `DESIGN.md`. The application, test harness, and command scripts are implemented in this directory. This plan remains the reference for test-first development.
 
 ## Technology stack
 
@@ -11,7 +11,8 @@ Use the following stack for implementation under `/UI`. Resolve compatible stabl
 | Application | React + TypeScript with strict checking | Components and typed provider, session, and architecture contracts |
 | Build and development | Vite with the React TypeScript template | Local dev server and static production bundle |
 | Styling | CSS Modules, global CSS variables, and CSS Grid | Component styles, shared visual tokens, and the specified two-panel layout |
-| State | React `useReducer` and Context | Explicit session and conversation transitions; local state for diagram presentation |
+| Workflows | Effect (`effect`) with typed errors and injected provider services | Compose validation, conversation, cancellation, and architecture updates; run Effects at the UI boundary |
+| State | React `useReducer`; Effect Context for service dependencies | Explicit session and conversation transitions; local state for diagram presentation |
 | Diagram | React Flow (`@xyflow/react`) | Controlled nodes/edges, selection, dragging, pan, zoom, and fit-to-view |
 | Runtime validation | Zod | Validate provider turn results and architecture documents; infer TypeScript data types |
 | Provider transport | Native `fetch` and `AbortController` behind the provider adapter | Authenticated requests and cancellation |
@@ -67,7 +68,7 @@ Run these scripts from `/UI` after scaffolding:
 | `npm run build` | Type-check and build static assets into `dist/` |
 | `npm run preview` | Serve the production build locally |
 
-Configure Playwright to start the Vite server for local tests and the production preview server for CI journeys. Run journeys in Chromium, Firefox, and WebKit; use Chromium for the detailed geometry checks. CI installs the matching Playwright browsers, runs static checks and Vitest, builds the app, then tests the production bundle. These scripts and configuration files are planned deliverables, not files installed by this document.
+Configure Playwright to start the Vite server for local tests and the production preview server for CI journeys. Run journeys in Chromium, Firefox, and WebKit; use Chromium for the detailed geometry checks. CI installs the matching Playwright browsers, runs static checks and Vitest, builds the app, then tests the production bundle. These scripts and configuration files are checked in. The supported runtime is Node 26; see `.nvmrc` for the tested version.
 
 ## Method and test boundaries
 

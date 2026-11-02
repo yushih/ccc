@@ -1,0 +1,8 @@
+.diagram { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.canvas { flex: 1; min-height: 240px; }
+.node { background: #fffefa; color: #24372b; border: 1px solid #78917b; border-radius: 8px; padding: 20px 12px; width: 180px; font-family: inherit; font-size: 13px; box-shadow: 0 3px 12px #24372b0a; }
+.inspector { overflow-y: auto; max-height: 38%; border-top: 1px solid var(--line); padding: 20px 24px; background: #f3f5ef; }
+.details { margin-bottom: 20px; }.details h3 { margin: 0 0 8px; font-size: 17px; font-weight: 500; }.details p { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.kind { font-family: var(--mono); font-size: 10px; text-transform: uppercase; color: #526350; letter-spacing: .8px; }
+.inspector summary { font-size: 13px; cursor: pointer; }.inspector summary > span { float: right; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.list { list-style: none; padding: 0; margin: 16px 0 0; }.list button { width: 100%; display: flex; justify-content: space-between; gap: 16px; align-items: center; text-align: left; border: 0; background: transparent; padding: 10px 8px; color: var(--ink); font-size: 12px; cursor: pointer; border-radius: 4px; }.list button:hover, .list button[aria-pressed=true] { background: #e0e8dc; }

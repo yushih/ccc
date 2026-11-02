@@ -33,7 +33,7 @@ The initial left panel contains only the setup form and its instructions or feed
 
 Reject an empty or whitespace-only key locally. Do not enforce a particular key prefix. Trim surrounding whitespace before validation. On confirmation, take a snapshot of the submitted credentials, disable duplicate submissions and field edits, and expose a visible and screen-reader-accessible validating state.
 
-The OpenAI adapter makes a minimal documented authenticated request that does not generate conversation content. The precise endpoint and browser compatibility must be verified against current OpenAI documentation during implementation. A successful response establishes credential validity for that request; it does not prove permission, quota, or availability for every model.
+The OpenAI adapter makes a minimal documented authenticated request that does not generate conversation content. The adapter uses `GET https://api.openai.com/v1/models` with Bearer authentication. A key restricted from listing models receives a permission error. Browser compatibility must also be checked from the deployed origin. A successful response establishes credential validity for that request; it does not prove permission, quota, or availability for every model.
 
 On success, store the active provider session in memory, clear the setup form's copy of the key, and replace the form with chat. On failure, keep the form and permit retry. Differentiate rejected credentials from network/CORS problems, rate limiting, and provider outages; do not call all failures an invalid key. Never render a raw provider error body if it might expose credentials or internal details.
 
@@ -58,7 +58,7 @@ After validation, show the active provider, an empty transcript with a short arc
 
 The architect asks about requirements and resources and explains the proposed solution. Each turn sends the relevant conversation and current accepted architecture through the provider adapter. Responses are delivered as complete messages. Present pending feedback immediately.
 
-The setup dropdown chooses a provider, not a model. Keep the model identifier in explicit application configuration. Before implementation is considered complete, choose and document a supported model after checking current provider documentation. Missing configuration must produce a clear configuration error. A valid key with no access to that model produces a model-access error during chat, not a claim that the key is invalid.
+The setup dropdown chooses a provider, not a model. Keep the model identifier in explicit application configuration. Configure it with `VITE_OPENAI_MODEL`; `.env.example` uses `gpt-6-luna`, which supports structured output. The adapter uses `POST /v1/responses` with `text.format` set to a strict JSON schema and `store: false`. See the official [models endpoint](https://developers.openai.com/api/reference/resources/models/methods/list), [structured output guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses), and [model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna). Missing configuration must produce a clear configuration error. A valid key with no access to that model produces a model-access error during chat, not a claim that the key is invalid.
 
 Render messages as text or sanitized Markdown with raw HTML disabled. Model content and diagram labels are untrusted input. Chat does not authorize tools to deploy infrastructure or sign transactions.
 
@@ -73,7 +73,7 @@ ArchitectureDocument
   edges: [{ id, source, target, label }]
 ```
 
-IDs must be unique within their collection; edges must reference existing nodes; strings and collection sizes must have documented bounds. Node kinds come from an explicit allowlist suitable for the architect domain. These details are finalized with the schema before implementation. Selection, viewport, and dragged positions are local presentation state, not architectural meaning.
+IDs must be unique within their collection; edges must reference existing nodes; strings and collection sizes must have documented bounds. Node kinds come from an explicit allowlist suitable for the architect domain. Allow node kinds `person`, `wallet`, `device`, `service`, `policy`, and `backup`. Limit a document to 100 nodes and 200 edges, IDs to 80 characters, labels to 120 characters, and descriptions to 2,000 characters. IDs and node labels must be nonempty. Selection, viewport, and dragged positions are local presentation state, not architectural meaning.
 
 Support pan, zoom, fit-to-view, selecting nodes or edges to inspect details, and dragging nodes to arrange the view. Provide accessible controls and a keyboard-operable textual node/connection list so the diagram's meaning is available without a pointer. The user requests semantic changes to nodes and connections through chat.
 
