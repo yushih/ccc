@@ -92,7 +92,7 @@ Suggested modules, independent of framework choice:
 - Architecture controller: schema validation, revision checks, and atomic replacement.
 - Diagram view: graph rendering, layout, selection, and accessible alternatives.
 
-Proposed implementation stack: TypeScript and React, with a graph renderer selected for the interactions and accessibility above. Use a unit/component test runner and browser automation for user journeys. These are design recommendations, not installed dependencies. Keep the `/kb` integration behind the agent boundary; the browser must not assume it can directly read repository files. Knowledge retrieval and the final builder specification contract need a later design.
+The implementation stack and tooling are specified in `TDD_PLAN.md`. Keep the `/kb` integration behind the agent boundary; the browser must not assume it can directly read repository files. Knowledge retrieval and the final builder specification contract need a later design.
 
 ## Credential and network boundary
 
