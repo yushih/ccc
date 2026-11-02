@@ -83,6 +83,10 @@ If an architecture update is malformed or stale, retain the last valid diagram a
 
 ## Application boundaries
 
+Architect the application code with Effect (`effect`, also known as Effect.ts). Model application workflows, dependencies, asynchronous operations, and recoverable failures as composable Effects with explicit error types. Run Effects at the UI boundary; keep React rendering and local presentation state separate from workflow execution.
+
+Wrap library calls that signal failure by throwing exceptions at their integration boundary. Use `Effect.try` for synchronous throwing calls and `Effect.tryPromise` for asynchronous calls that can reject, mapping failures into typed application errors. Invoke the library call inside the wrapper so failures are captured. Do not use `Effect.sync` or `Effect.promise` for operations with expected failures, and do not allow those failures to escape as unhandled exceptions or promise rejections. See the [Effect documentation on creating Effects](https://effect.website/docs/v3/getting-started/creating-effects).
+
 Suggested modules, independent of framework choice:
 
 - Application shell: two-panel layout and session lifecycle.
