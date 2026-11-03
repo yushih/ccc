@@ -1,6 +1,6 @@
 # CCC single-page UI design
 
-This document is the reference for the UI design. See the repository README for the overarching project purpose.
+This document defines UI behavior and data contracts. See [../README.md](../README.md) for the project purpose and [../AGENTS.md](../AGENTS.md) for the code map, stack, commands, coding standards, and development procedures.
 
 ## Purpose and scope
 
@@ -35,7 +35,7 @@ Reject an empty or whitespace-only key locally. Do not enforce a particular key 
 
 The OpenAI adapter makes a minimal documented authenticated request that does not generate conversation content. The adapter uses `GET https://api.openai.com/v1/models` with Bearer authentication. A key restricted from listing models receives a permission error. Browser compatibility must also be checked from the deployed origin. A successful response establishes credential validity for that request; it does not prove permission, quota, or availability for every model.
 
-On success, store the active provider session in memory, clear the setup form's copy of the key, and replace the form with chat. On failure, keep the form and permit retry. Differentiate rejected credentials from network/CORS problems, rate limiting, and provider outages; do not call all failures an invalid key. Never render a raw provider error body if it might expose credentials or internal details.
+On success, store the active provider session in memory, clear the setup form's copy of the key, and replace the form with chat. On failure, keep the form and permit retry. Differentiate rejected credentials from network/CORS problems, rate limiting, and provider outages; do not call all failures an invalid key. Display safe, actionable error messages rather than raw provider error bodies.
 
 ## State and session lifecycle
 
@@ -60,11 +60,11 @@ The architect asks about requirements and resources and explains the proposed so
 
 The setup dropdown chooses a provider, not a model. Keep the model identifier in explicit application configuration. Configure it with `VITE_OPENAI_MODEL`; `.env.example` uses `gpt-6-luna`, which supports structured output. The adapter uses `POST /v1/responses` with `text.format` set to a strict JSON schema and `store: false`. See the official [models endpoint](https://developers.openai.com/api/reference/resources/models/methods/list), [structured output guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses), and [model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna). Missing configuration must produce a clear configuration error. A valid key with no access to that model produces a model-access error during chat, not a claim that the key is invalid.
 
-Render messages as text or sanitized Markdown with raw HTML disabled. Model content and diagram labels are untrusted input. Chat does not authorize tools to deploy infrastructure or sign transactions.
+Messages are displayed as plain text with whitespace preserved. Chat does not authorize tools to deploy infrastructure or sign transactions.
 
 ## Architecture representation and interaction
 
-Keep a serializable architecture document separate from graph-library state:
+The serializable architecture document has this shape:
 
 ```text
 ArchitectureDocument
@@ -81,26 +81,13 @@ Use a provider-independent turn result containing assistant text and an optional
 
 If an architecture update is malformed or stale, retain the last valid diagram and show a recoverable warning alongside any valid assistant text. A response without an update leaves the diagram unchanged. Do not parse arbitrary prose as executable graph commands. Structured-output support and encoding belong in the provider adapter and must be verified for the chosen model.
 
-## Application boundaries
+## Agent integration
 
-Architect the application code with Effect (`effect`, also known as Effect.ts). Model application workflows, dependencies, asynchronous operations, and recoverable failures as composable Effects with explicit error types. Run Effects at the UI boundary; keep React rendering and local presentation state separate from workflow execution.
-
-Wrap library calls that signal failure by throwing exceptions at their integration boundary. Use `Effect.try` for synchronous throwing calls and `Effect.tryPromise` for asynchronous calls that can reject, mapping failures into typed application errors. Invoke the library call inside the wrapper so failures are captured. Do not use `Effect.sync` or `Effect.promise` for operations with expected failures, and do not allow those failures to escape as unhandled exceptions or promise rejections. See the [Effect documentation on creating Effects](https://effect.website/docs/v3/getting-started/creating-effects).
-
-Suggested modules, independent of framework choice:
-
-- Application shell: two-panel layout and session lifecycle.
-- Provider setup: form validation, progress, and safe errors.
-- Provider adapter: `validateCredentials`, `sendTurn`, cancellation, and normalized errors.
-- Conversation controller: transcript, one active turn, retry, and state transitions.
-- Architecture controller: schema validation, revision checks, and atomic replacement.
-- Diagram view: graph rendering, layout, selection, and accessible alternatives.
-
-The implementation stack and tooling are specified in `TDD_PLAN.md`. Keep the `/kb` integration behind the agent boundary; the browser must not assume it can directly read repository files. Knowledge retrieval and the final builder specification contract need a later design.
+Knowledge retrieval and the final builder specification contract require separate designs.
 
 ## Credential and network boundary
 
-The proposed transport calls the provider directly from the browser using the user's in-memory key. Make the browser exposure clear in setup copy, serve the deployed app over HTTPS, and avoid third-party analytics or scripts that could capture credentials. Never commit API keys. The key must never enter localStorage, sessionStorage, IndexedDB, URLs, logs, error reports, or exported architecture data. Masking the input does not make a browser-held credential inaccessible to browser code.
+The transport calls the provider directly from the browser. Setup copy must explain that the key is accessible to browser code and is sent to OpenAI. Serve the deployed app over HTTPS and avoid third-party analytics or scripts that could capture credentials. Credential-handling standards are defined in `../AGENTS.md`.
 
 Verify the chosen request works from the deployed browser origin before committing to this transport. If provider restrictions require a backend relay, revise this design to specify its authentication, credential retention, and deployment boundary before implementing it. Do not introduce a shared server key as a silent fallback.
 
@@ -112,6 +99,5 @@ Verify the chosen request works from the deployed browser origin before committi
 - A conversation turn uses the user's active provider credentials and configured model, displays the response, and can apply a valid architecture update.
 - Invalid or stale updates never corrupt the accepted architecture; cancellation and disconnect ignore late results.
 - Diagram interactions and keyboard alternatives work without changing solution semantics.
-- Credentials remain session-only, and automated tests run without real credentials or external provider calls.
 
 See `TDD_PLAN.md` for the sequence that turns these criteria into executable tests.
