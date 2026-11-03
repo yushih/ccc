@@ -1,6 +1,7 @@
 import { Effect, Either } from 'effect'
 import { describe, it, expect, vi } from 'vitest'
 import { createOpenAI } from './openai'
+import { INITIAL_PROMPT } from '../prompts'
 const message = { role: 'user' as const, content: 'Help me design custody' }
 const input = { messages: [message], architecture: { revision: 0, nodes: [], edges: [] } }
 const response = (text: string) => new Response(JSON.stringify({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text }] }] }))
@@ -50,4 +51,12 @@ describe('OpenAI adapter', () => {
     const result = await Effect.runPromise(Effect.either(createOpenAI('model', fetcher).sendTurn('fake', input)))
     expect(Either.isLeft(result) && result.left.kind).toBe('response')
   })
+})
+
+it('sends the shared opening prompt without additional instructions', async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify({ text: 'Hello', architecture: null })))
+  await Effect.runPromise(createOpenAI('model', fetcher).sendTurn('fake', { ...input, messages: [{ role: 'user', content: INITIAL_PROMPT, origin: 'app' }] }))
+  const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body))
+  expect(body).not.toHaveProperty('instructions')
+  expect(body.input).toEqual([{ role: 'user', content: INITIAL_PROMPT }])
 })

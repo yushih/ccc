@@ -42,7 +42,7 @@ On success, store the active provider session in memory, clear the setup form's 
 | State | UI and permitted transitions |
 | --- | --- |
 | `setup.idle` | Editable setup; valid local input can start validation |
-| `setup.validating` | Pending feedback; success enters `chat.ready`, failure enters `setup.error` |
+| `setup.validating` | Pending feedback; success starts the opening turn in `chat.responding`, failure enters `setup.error` |
 | `setup.error` | Safe error text and editable fields; resubmission retries validation |
 | `chat.ready` | Transcript, composer, and disconnect action; a nonempty message starts a turn |
 | `chat.responding` | Pending assistant feedback and stop action; block another turn until completion or cancellation |
@@ -54,9 +54,9 @@ An authentication rejection during chat invalidates the session and returns to s
 
 ## Chat behavior
 
-After validation, show the active provider, an empty transcript with a short architect introduction, a labeled multiline composer, a send button, and a disconnect action. The introduction is local UI copy, not a fabricated model response. Send submits nonempty content; Enter sends and Shift+Enter inserts a newline, while IME composition must not accidentally submit.
+After validation, show the active provider, transcript, labeled multiline composer, and disconnect action, then automatically send the placeholder opening prompt from `src/prompts.ts`. Display the model’s reply as the first assistant message. Retain the app-supplied prompt in conversation context but do not display it as user-authored text. While the opening request is pending, show progress and a stop action; failures support retry without duplicating the prompt. All model prompts belong in `src/prompts.ts`. Send submits nonempty content; Enter sends and Shift+Enter inserts a newline, while IME composition must not accidentally submit.
 
-The architect asks about requirements and resources and explains the proposed solution. Each turn sends the relevant conversation and current accepted architecture through the provider adapter. Responses are delivered as complete messages. Present pending feedback immediately.
+The architect asks about requirements and resources and explains the proposed solution. Each turn sends the conversation through the provider adapter without additional architect instructions. The current architecture is retained locally for validating updates. Responses are delivered as complete messages. Present pending feedback immediately.
 
 The setup dropdown chooses a provider, not a model. Keep the model identifier in explicit application configuration. Configure it with `VITE_OPENAI_MODEL`; `.env.example` uses `gpt-6-luna`, which supports structured output. The adapter uses `POST /v1/responses` with `text.format` set to a strict JSON schema and `store: false`. See the official [models endpoint](https://developers.openai.com/api/reference/resources/models/methods/list), [structured output guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses), and [model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna). Missing configuration must produce a clear configuration error. A valid key with no access to that model produces a model-access error during chat, not a claim that the key is invalid.
 

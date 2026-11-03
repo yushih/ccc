@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import App from './App'
 describe('initial setup', () => {
@@ -18,13 +18,13 @@ import { Effect } from 'effect'
 import { vi } from 'vitest'
 import type { Provider, TurnResult } from '../providers/types'
 import { error } from '../providers/errors'
-const fake = (): Provider => ({ validateCredentials: vi.fn(() => Effect.void), sendTurn: vi.fn(() => Effect.succeed({ text: 'What are your recovery requirements?', architecture: null })) })
+const fake = (): Provider => ({ validateCredentials: vi.fn(() => Effect.void), sendTurn: vi.fn(() => Effect.succeed({ text: 'What are your recovery requirements?', architecture: null })).mockReturnValueOnce(Effect.succeed({ text: 'Welcome to CCC.', architecture: null })) })
 async function connect(provider = fake()) {
   const user = userEvent.setup()
   const view = render(<App provider={provider} />)
   await user.type(screen.getByLabelText('API key'), '  fake-key  ')
   await user.click(screen.getByRole('button', { name: 'Connect to OpenAI' }))
-  await screen.findByLabelText('Message')
+  await screen.findByText('Welcome to CCC.')
   return { user, provider, ...view }
 }
 describe('setup and conversation lifecycle', () => {
@@ -100,9 +100,72 @@ describe('setup and conversation lifecycle', () => {
   it('keeps a newline for Shift+Enter and does not send an empty message', async () => {
     const { user, provider } = await connect()
     await user.click(screen.getByRole('button', { name: 'Send message' }))
-    expect(provider.sendTurn).not.toHaveBeenCalled()
+    expect(provider.sendTurn).toHaveBeenCalledTimes(1)
     await user.type(screen.getByLabelText('Message'), 'line{Shift>}{Enter}{/Shift}two')
     expect(screen.getByLabelText('Message')).toHaveValue('line\ntwo')
+    expect(provider.sendTurn).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('automatic opening turn', () => {
+  it('starts once after validation and keeps the app prompt in subsequent context without displaying it as user text', async () => {
+    const { user, provider, rerender } = await connect()
+    expect(provider.sendTurn).toHaveBeenCalledTimes(1)
+    const opening = vi.mocked(provider.sendTurn).mock.calls[0][1].messages[0]
+    expect(opening.role).toBe('user')
+    expect(opening.content).not.toBe('')
+    expect(screen.queryByText(opening.content)).not.toBeInTheDocument()
+    rerender(<App provider={provider} />)
+    expect(provider.sendTurn).toHaveBeenCalledTimes(1)
+    await user.type(screen.getByLabelText('Message'), 'My needs{Enter}')
+    await waitFor(() => expect(provider.sendTurn).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(provider.sendTurn).mock.calls[1][1].messages).toEqual([
+      opening, { role: 'assistant', content: 'Welcome to CCC.' }, { role: 'user', content: 'My needs' },
+    ])
+  })
+  it('does not start a conversation when validation fails', async () => {
+    const provider = fake()
+    vi.mocked(provider.validateCredentials).mockReturnValue(Effect.fail(error('authentication', 'Rejected')))
+    const user = userEvent.setup(); render(<App provider={provider} />)
+    await user.type(screen.getByLabelText('API key'), 'fake')
+    await user.click(screen.getByRole('button', { name: 'Connect to OpenAI' }))
+    await screen.findByRole('alert')
     expect(provider.sendTurn).not.toHaveBeenCalled()
+  })
+  it('retries the opening prompt without duplication', async () => {
+    const provider = fake()
+    vi.mocked(provider.sendTurn).mockReset().mockReturnValueOnce(Effect.fail(error('network', 'Opening failed'))).mockReturnValue(Effect.succeed({ text: 'Welcome after retry' }))
+    const user = userEvent.setup(); render(<App provider={provider} />)
+    await user.type(screen.getByLabelText('API key'), 'fake')
+    await user.click(screen.getByRole('button', { name: 'Connect to OpenAI' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Opening failed')
+    await user.click(screen.getByRole('button', { name: 'Retry response' }))
+    await screen.findByText('Welcome after retry')
+    expect(vi.mocked(provider.sendTurn).mock.calls[1][1].messages).toEqual(vi.mocked(provider.sendTurn).mock.calls[0][1].messages)
+  })
+  it('clears the session if authentication fails on the opening request', async () => {
+    const provider = fake()
+    vi.mocked(provider.sendTurn).mockReset().mockReturnValue(Effect.fail(error('authentication', 'Reconnect')))
+    const user = userEvent.setup(); render(<App provider={provider} />)
+    await user.type(screen.getByLabelText('API key'), 'fake')
+    await user.click(screen.getByRole('button', { name: 'Connect to OpenAI' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Reconnect')
+    expect(screen.getByLabelText('API key')).toHaveValue('')
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument()
+  })
+  it('ignores an opening response after disconnect', async () => {
+    let resolve!: (value: TurnResult) => void
+    const provider = fake()
+    vi.mocked(provider.sendTurn).mockReset().mockReturnValue(Effect.tryPromise({ try: () => new Promise<TurnResult>(r => { resolve = r }), catch: () => error('network', 'Failed') }))
+    const user = userEvent.setup(); render(<App provider={provider} />)
+    await user.type(screen.getByLabelText('API key'), 'fake')
+    await user.click(screen.getByRole('button', { name: 'Connect to OpenAI' }))
+    await screen.findByRole('button', { name: 'Stop response' })
+    expect(screen.getByLabelText('Message')).toHaveAttribute('readonly')
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }))
+    await act(async () => resolve({ text: 'Obsolete greeting' }))
+    expect(screen.queryByText('Obsolete greeting')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('API key')).toHaveValue('')
   })
 })

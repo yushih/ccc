@@ -4,6 +4,7 @@ See [README.md](README.md) for the project purpose, [UI/DESIGN.md](UI/DESIGN.md)
 
 - `UI/`: single-page interface for the architect and builder.
 - `UI/src/app/`: shell, setup/chat UI, session reducer, and styles.
+- `UI/src/prompts.ts`: all model prompts.
 - `UI/src/providers/`: provider adapter, Effect service contract, typed errors, and private credential lifecycle.
 - `UI/src/features/architecture/`: schema, revision-checked updates, placement, and diagram view.
 - `UI/src/test/`: test setup; colocate unit/component tests as `*.test.ts(x)`. Browser journeys live in `UI/e2e/`.

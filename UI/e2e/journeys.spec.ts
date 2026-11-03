@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { INITIAL_PROMPT } from '../src/prompts'
 const graph = { baseRevision: 0, nodes: [
   { id: 'owner', kind: 'person', label: 'Owner', description: 'Approves transfers' },
   { id: 'wallet', kind: 'wallet', label: 'Hardware wallet', description: 'Keeps signing material offline' },
@@ -12,12 +13,17 @@ async function mockNetwork(page: Page) {
     return route.abort('blockedbyclient')
   })
   await page.route('https://api.openai.com/v1/models', route => route.fulfill({ json: { data: [{ id: 'gpt-6-luna' }] } }))
-  await page.route('https://api.openai.com/v1/responses', route => route.fulfill({ json: result('Let’s start with an offline signer.') }))
+  await page.route('https://api.openai.com/v1/responses', route => {
+    const input = route.request().postDataJSON().input
+    const opening = input.length === 1 && input[0].content === INITIAL_PROMPT
+    return route.fulfill({ json: opening ? result('Welcome to CCC.', null) : result('Let’s start with an offline signer.') })
+  })
 }
 async function connect(page: Page) {
   await page.goto('/')
   await page.getByLabel('API key', { exact: true }).fill('fake-browser-key')
   await page.getByRole('button', { name: 'Connect to OpenAI' }).click()
+  await expect(page.getByText('Welcome to CCC.', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Message', { exact: true })).toBeFocused()
 }
 async function send(page: Page, text = 'I need offline custody') {
@@ -55,8 +61,9 @@ test('a rejected key can be corrected and retried', async ({ page }) => {
   await expect(page.getByLabel('Message', { exact: true })).toBeVisible()
 })
 test('model access errors preserve the session and retry does not duplicate messages', async ({ page }) => {
+  await connect(page)
   await page.route('https://api.openai.com/v1/responses', route => route.fulfill({ status: 403, json: {} }))
-  await connect(page); await send(page)
+  await send(page)
   await expect(page.getByRole('alert')).toContainText('configured model')
   await expect(page.getByLabel('API key', { exact: true })).toHaveCount(0)
   await page.route('https://api.openai.com/v1/responses', route => route.fulfill({ json: result('Recovered', null) }))
@@ -75,10 +82,11 @@ test('invalid graph leaves the previous architecture visible', async ({ page }) 
   await expect(page.getByText('REV 01')).toBeVisible()
 })
 test('stopping and disconnecting ignore delayed responses', async ({ page }) => {
+  await connect(page)
   let release!: () => void
   const gate = new Promise<void>(resolve => { release = resolve })
   await page.route('https://api.openai.com/v1/responses', async route => { await gate; await route.fulfill({ json: result('Too late') }).catch(() => {}) })
-  await connect(page); await send(page)
+  await send(page)
   await page.getByRole('button', { name: 'Stop response' }).click()
   await page.getByRole('button', { name: 'Disconnect' }).click()
   release()
@@ -116,4 +124,20 @@ test('graph supports drag, zoom and fit without changing semantic data', async (
   await expect(viewport).not.toHaveAttribute('style', transform!)
   await page.getByRole('button', { name: 'Fit View', exact: true }).click()
   await expect(page.getByText('REV 01')).toBeVisible()
+})
+
+test('validation automatically sends the shared opening prompt and retains it in context', async ({ page }) => {
+  const requests: { input: { role: string; content: string }[] }[] = []
+  page.on('request', request => { if (request.url().endsWith('/v1/responses')) requests.push(request.postDataJSON()) })
+  await connect(page)
+  expect(requests).toHaveLength(1)
+  expect(requests[0].input).toEqual([{ role: 'user', content: INITIAL_PROMPT }])
+  await expect(page.getByText(INITIAL_PROMPT, { exact: true })).toHaveCount(0)
+  await send(page)
+  await expect(page.getByText('Let’s start with an offline signer.')).toBeVisible()
+  expect(requests[1].input).toEqual([
+    { role: 'user', content: INITIAL_PROMPT },
+    { role: 'assistant', content: 'Welcome to CCC.' },
+    { role: 'user', content: 'I need offline custody' },
+  ])
 })
