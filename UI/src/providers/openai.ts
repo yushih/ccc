@@ -34,7 +34,7 @@ export function createOpenAI(model: string, fetcher: typeof fetch = (...args) =>
     sendTurn: (key, input) => Effect.gen(function* () {
       if (!model.trim()) return yield* Effect.fail(error('configuration', 'No model is configured. Set VITE_OPENAI_MODEL and restart the application.'))
       const body = yield* Effect.try({
-        try: () => JSON.stringify({ model, store: false,
+        try: () => JSON.stringify({ model, store: false, instructions: input.instructions,
           input: input.messages.map(({ role, content }) => ({ role, content })), text: { format: { type: 'json_schema', name: 'architect_turn', strict: true, schema: turnJsonSchema } },
         }), catch: responseError,
       })

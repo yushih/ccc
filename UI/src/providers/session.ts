@@ -1,5 +1,5 @@
 import { Effect, Either } from 'effect'
-import { acceptUpdate } from '../features/architecture/schema'
+import { acceptUpdate, type Architecture } from '../features/architecture/schema'
 import { error } from './errors'
 import { ModelProvider, type TurnInput } from './types'
 
@@ -17,15 +17,15 @@ export function createSession() {
       yield* provider.validateCredentials(submitted)
       yield* Effect.sync(() => { if (attempt === generation) key = submitted })
     }),
-    respond: (input: TurnInput) => Effect.gen(function* () {
+    respond: (input: TurnInput, currentArchitecture: Architecture) => Effect.gen(function* () {
       if (!key) return yield* Effect.fail(error('authentication', 'Reconnect to OpenAI to continue.'))
       const provider = yield* ModelProvider
       const result = yield* provider.sendTurn(key, input)
-      if (result.architecture === undefined || result.architecture === null) return { text: result.text, architecture: input.architecture, warning: undefined }
-      const update = yield* Effect.either(acceptUpdate(input.architecture, result.architecture))
+      if (result.architecture === undefined || result.architecture === null) return { text: result.text, architecture: currentArchitecture, warning: undefined }
+      const update = yield* Effect.either(acceptUpdate(currentArchitecture, result.architecture))
       return Either.isRight(update)
         ? { text: result.text, architecture: update.right, warning: undefined }
-        : { text: result.text, architecture: input.architecture, warning: update.left.message }
+        : { text: result.text, architecture: currentArchitecture, warning: update.left.message }
     }),
   }
 }

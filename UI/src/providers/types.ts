@@ -1,8 +1,7 @@
 import { Context, type Effect } from 'effect'
-import type { Architecture } from '../features/architecture/schema'
 import type { AppError } from './errors'
 export type Message = { role: 'user' | 'assistant'; content: string; origin?: 'app' }
-export type TurnInput = { messages: Message[]; architecture: Architecture }
+export type TurnInput = { instructions: string; messages: Message[] }
 export type TurnResult = { text: string; architecture?: unknown }
 export interface Provider {
   validateCredentials: (key: string) => Effect.Effect<void, AppError>

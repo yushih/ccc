@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { INITIAL_PROMPT } from '../src/prompts'
+import { ARCHITECT_INSTRUCTIONS, INITIAL_PROMPT } from '../src/prompts'
 const graph = { baseRevision: 0, nodes: [
   { id: 'owner', kind: 'person', label: 'Owner', description: 'Approves transfers' },
   { id: 'wallet', kind: 'wallet', label: 'Hardware wallet', description: 'Keeps signing material offline' },
@@ -127,14 +127,19 @@ test('graph supports drag, zoom and fit without changing semantic data', async (
 })
 
 test('validation automatically sends the shared opening prompt and retains it in context', async ({ page }) => {
-  const requests: { input: { role: string; content: string }[] }[] = []
+  const requests: { instructions: string; input: { role: string; content: string }[] }[] = []
   page.on('request', request => { if (request.url().endsWith('/v1/responses')) requests.push(request.postDataJSON()) })
   await connect(page)
   expect(requests).toHaveLength(1)
+  expect(requests[0].instructions).toBe(ARCHITECT_INSTRUCTIONS)
+  expect(requests[0]).not.toHaveProperty('architecture')
+  await expect(page.getByText(ARCHITECT_INSTRUCTIONS, { exact: true })).toHaveCount(0)
   expect(requests[0].input).toEqual([{ role: 'user', content: INITIAL_PROMPT }])
   await expect(page.getByText(INITIAL_PROMPT, { exact: true })).toHaveCount(0)
   await send(page)
   await expect(page.getByText('Let’s start with an offline signer.')).toBeVisible()
+  expect(requests[1].instructions).toBe(ARCHITECT_INSTRUCTIONS)
+  expect(requests[1]).not.toHaveProperty('architecture')
   expect(requests[1].input).toEqual([
     { role: 'user', content: INITIAL_PROMPT },
     { role: 'assistant', content: 'Welcome to CCC.' },

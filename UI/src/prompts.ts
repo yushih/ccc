@@ -1,10 +1,8 @@
-// Placeholder opening prompt; replace this text when the onboarding flow is defined.
-export const INITIAL_PROMPT = `
-You are a crypto custody solution expert. Now you are working with the user(me) to design a custodial solution.
+// Persistent architect guidance, supplied separately on every turn.
+export const ARCHITECT_INSTRUCTIONS = `
+You are a crypto custody solution expert. Now you are working with the user to design a custodial solution.
 
-Start by gathering requirements and available resources.
-
-Design the solution with the user. Use user expertise in crypto custody. Also reference the custodial wiki attached below.
+Design the solution with the user. Use user expertise in crypto custody. Also reference the custodial wiki supplied in the opening context.
 
 Let the user clear know the characteristics of the design, specifically:
 1. under what conditions the assets are going to be unrecoverably locked
@@ -16,6 +14,11 @@ Ask user if she/he is personal user or a corporate one. Offer the latter enterpr
 Ask the user if she/he needs Shamir backup when applicable. Offer a concise explanation of what it is and let the user ask for more details if desired.
 
 Gauge the user's level of cryptographic, computer system and security knowledge during the conversation. Adjust the style of languages you use accordingly.
+
+`
+
+// Hidden opening context; retained in conversation history as reference material.
+export const INITIAL_PROMPT = `Start by gathering requirements and available resources.
 
 The custodial wiki begins here:
 
@@ -290,14 +293,14 @@ Backup holders and upgrade administrators must appear in the same analysis as no
 ## Example 1: hardware and phone, with a cold fallback
 
 The skeleton proposes a hot route requiring a hardware wallet and a phone, plus an independent cold laptop route.
-Its authority is `(hardware AND phone) OR laptop`.
+Its authority is \`(hardware AND phone) OR laptop\`.
 
 Compromise of the laptop alone can authorize a spend.
 The hot route resists one-device compromise, but that does not raise the cold route's threshold.
 Keeping the laptop offline reduces exposure. It does not change its unilateral authority.
 
 A possible revision adds a separate recovery authority and delay:
-`(hardware AND phone) OR (recovery_A AND recovery_B AND elapsed_delay)`.
+\`(hardware AND phone) OR (recovery_A AND recovery_B AND elapsed_delay)\`.
 This changes availability, cost, and monitoring requirements.
 The chain or deployed contract must enforce the expression. A coordinator setting cannot substitute for that enforcement.
 
@@ -333,7 +336,7 @@ Automatic replenishment can defeat the balance cap if the attacker repeatedly dr
 Require reserve approval or a separately enforced aggregate replenishment limit.
 
 Do not grant the hot account unlimited allowances over reserve assets.
-ERC-20 allowances authorize later `transferFrom` calls.
+ERC-20 allowances authorize later \`transferFrom\` calls.
 See [ERC-20](https://eips.ethereum.org/EIPS/eip-20).
 
 This design reduces expected exposure through separation of assets.
@@ -431,7 +434,7 @@ State which authorities share a failure domain.
 
 Use this template for each component:
 
-```yaml
+\`\`\`yaml
 id: signer_A
 role: independent owner signer
 implementation: selected product and exact version
@@ -449,7 +452,7 @@ recovery: procedure identifier
 exit: provider-independent procedure or explicit limitation
 evidence: source URLs and test record identifiers
 status: verified or documented-only or unknown
-```
+\`\`\`
 
 Replace every descriptive placeholder before implementation.
 Unknown chain support, recovery authority, or key ownership is a blocking design issue.
@@ -593,7 +596,7 @@ Document both powers separately.
 | Authorization | A rule permits an action. |
 | Authentication | A system checks control of an identity credential. |
 | Quorum | A set of participants that satisfies a threshold rule. |
-| Threshold `t-of-n` | At least `t` of `n` participants must cooperate. |
+| Threshold \`t-of-n\` | At least \`t\` of \`n\` participants must cooperate. |
 | Multisig | A spending rule checks several independent signing keys. |
 | Threshold signature | Several key shares jointly produce one signature. |
 | Secret sharing | Shares reconstruct a secret when a threshold is met. |
@@ -726,13 +729,13 @@ Treat model-generated transaction descriptions as untrusted input to determinist
 
 Use explicit states:
 
-```text
+\`\`\`text
 proposed -> decoded -> policy_checked -> awaiting_approvals
          -> authorized -> signing -> signed -> submitted -> confirmed -> finalized
-```
+\`\`\`
 
-Allow explicit `rejected`, `cancelled`, `expired`, and `failed` outcomes where appropriate.
-A `signed` operation can remain executable after local cancellation.
+Allow explicit \`rejected\`, \`cancelled\`, \`expired\`, and \`failed\` outcomes where appropriate.
+A \`signed\` operation can remain executable after local cancellation.
 An unknown submission result requires reconciliation, not automatic construction of another payment.
 
 Assign a unique operation ID and immutable payload digest.
@@ -772,7 +775,7 @@ See [BIP-174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki).
 
 ## EIP-1193 provider interface
 
-EIP-1193 defines a JavaScript provider API with a `request` method and events such as `accountsChanged` and `chainChanged`.
+EIP-1193 defines a JavaScript provider API with a \`request\` method and events such as \`accountsChanged\` and \`chainChanged\`.
 It does not define custody or guarantee that a provider is trustworthy.
 See [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193).
 
@@ -808,7 +811,7 @@ An account-management Snap can implement custom account behavior through the Key
 The builder must select the exact supported account type, SDK, permissions, and user interface.
 A Snap is an integration boundary, not automatic proof of secure custody.
 
-MetaMask directs builders to use `onKeyringRequest` for account-management requests.
+MetaMask directs builders to use \`onKeyringRequest\` for account-management requests.
 Its security guidance requires restricted caller origins and method access.
 Account objects can reach dapps and must not contain secrets.
 See [account-management security](https://docs.metamask.io/snaps/features/custom-evm-accounts/security/).
@@ -848,7 +851,7 @@ multisig.md
 ## Mechanism and applicability
 
 A multisig spending rule requires signatures from several independent keys.
-A `t-of-n` rule accepts at least `t` authorized keys from `n` registered keys.
+A \`t-of-n\` rule accepts at least \`t\` authorized keys from \`n\` registered keys.
 The chain or account program checks that rule. A coordinator collects requests and signatures but should not hold a spending quorum.
 
 Bitcoin scripts support multisig conditions. EVM contracts such as Safe support owner thresholds.
@@ -887,7 +890,7 @@ Check the registered policy and derive expected addresses independently.
 | Quorum compromise | The chain accepts the required valid signatures. | Separate people, devices, locations, and backup control. |
 | Shared seed across owners | One root secret derives several owner keys. | Generate independent roots for independent authorities. |
 | Lost configuration | Keys do not uniquely identify scripts and derivation paths. | Preserve descriptors and known address checks. |
-| Cosigner refusal | Fewer than `t` available keys cannot satisfy the rule. | Choose a loss-tolerant threshold or explicit recovery path. |
+| Cosigner refusal | Fewer than \`t\` available keys cannot satisfy the rule. | Choose a loss-tolerant threshold or explicit recovery path. |
 | Shared transaction deception | Every signer approves the same malicious proposal. | Use independent decoding and destination validation. |
 | Unsupported wallet software | Tools cannot construct or recognize the spending policy. | Test recovery and spending with replacement tooling. |
 | Contract bypass | A module or administrator has alternate authority. | Analyze every contract path. |
@@ -1075,8 +1078,8 @@ A public repository does not prove that a hosted service runs that version.
 ## Evaluation record
 
 For each candidate, record the claim, source URL, retrieval date, tested version, observed result, and unresolved dependency.
-Use `verified`, `documented-only`, `failed`, or `unknown` as evidence status.
-Do not turn `unknown` into `supported` during design generation.
+Use \`verified\`, \`documented-only\`, \`failed\`, or \`unknown\` as evidence status.
+Do not turn \`unknown\` into \`supported\` during design generation.
 
 The research hints also name Fireblocks, Zengo, Safeheron, Coinbase, Vultisig, and other providers.
 This wiki covers their relevant technology families. It does not assert current feature parity or audit status for those products.
@@ -1131,12 +1134,12 @@ This wiki does not infer that SDK's features or deployment readiness from the ti
 
 ## Bitcoin absolute and relative locks
 
-`CHECKLOCKTIMEVERIFY`, or CLTV, restricts a script branch until an absolute height or time condition is met.
-`CHECKSEQUENCEVERIFY`, or CSV, supports relative age conditions with the corresponding transaction rules.
+\`CHECKLOCKTIMEVERIFY\`, or CLTV, restricts a script branch until an absolute height or time condition is met.
+\`CHECKSEQUENCEVERIFY\`, or CSV, supports relative age conditions with the corresponding transaction rules.
 See [BIP-65](https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki) and
 [BIP-112](https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki).
 
-A transaction's `nLockTime` alone delays that transaction. It does not stop an authorized signer from creating a different immediate transaction.
+A transaction's \`nLockTime\` alone delays that transaction. It does not stop an authorized signer from creating a different immediate transaction.
 A script-enforced condition constrains the relevant spending branch.
 Every alternate branch must be reviewed separately.
 
@@ -1256,8 +1259,8 @@ Use separate roots when administrative independence matters. Several accounts un
 
 ## Shamir secret sharing
 
-A `t-of-n` scheme divides a secret into shares. At least `t` shares reconstruct it.
-Fewer than `t` shares do not reveal the secret under the scheme's assumptions.
+A \`t-of-n\` scheme divides a secret into shares. At least \`t\` shares reconstruct it.
+Fewer than \`t\` shares do not reveal the secret under the scheme's assumptions.
 This property depends on correct randomness, implementation, and the chosen threshold.
 
 SLIP-39 adds mnemonic encoding, checksums, identifiers, and group thresholds.
@@ -1418,7 +1421,7 @@ The account's security includes every execution and administration path.
 EVM compatibility alone does not prove identical precompiles, deployed addresses, or service availability.
 Record the chain ID, account address, implementation version, factory, and all extensions.
 
-ERC-4337 defines a `UserOperation` workflow through bundlers and an EntryPoint contract.
+ERC-4337 defines a \`UserOperation\` workflow through bundlers and an EntryPoint contract.
 An optional paymaster can sponsor fees. The account's validation code determines which operations it accepts.
 ERC-4337 does not itself select a secure owner policy.
 See [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337).
@@ -1527,11 +1530,11 @@ Include administrators who can reset another administrator's credentials.
 ## Minimum compromise sets
 
 Write a Boolean condition for each spend path. Use identities that represent actual control, not product labels.
-For `(A AND B) OR C`, compromise of `C` is sufficient.
-For a 2-of-3 wallet, the minimal sets are `{A,B}`, `{A,C}`, and `{B,C}`.
+For \`(A AND B) OR C\`, compromise of \`C\` is sufficient.
+For a 2-of-3 wallet, the minimal sets are \`{A,B}\`, \`{A,C}\`, and \`{B,C}\`.
 
 Then substitute shared dependencies.
-If one cloud administrator controls `A` and `B`, that administrator is a one-event compromise set.
+If one cloud administrator controls \`A\` and \`B\`, that administrator is a one-event compromise set.
 If one backup contains both keys, theft of that backup has the same effect.
 If the user must use one website to recover all shares, that website is an availability dependency.
 
@@ -1586,7 +1589,7 @@ RFC 9591's generic secp256k1 suite does not by itself establish Bitcoin compatib
 The [BIP-340 FROST proposal](https://github.com/siv2r/bip-frost-signing) describes the extra compatibility requirements.
 Treat that proposal as a specification candidate, not evidence of universal wallet support.
 
-MuSig2 is an `n-of-n` aggregate signature protocol. It is not an arbitrary `t-of-n` threshold scheme.
+MuSig2 is an \`n-of-n\` aggregate signature protocol. It is not an arbitrary \`t-of-n\` threshold scheme.
 [BIP-327](https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki) makes this distinction explicit.
 
 ## Key and signing lifecycle

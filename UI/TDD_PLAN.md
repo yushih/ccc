@@ -153,3 +153,10 @@ Exit: the core journey works against provider-shaped responses without live netw
 Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and `npm run test:e2e`. Confirm that the build contains no embedded credentials and that documentation explains startup, model configuration, session-only credentials, and narrow-screen behavior. Record commands and results when implementation is delivered.
 
 If the user elects to perform a live smoke test, use their key only in the running setup form and keep it out of test fixtures, command lines, screenshots, and reports. A manual provider check complements the mocked suite; it is not a CI requirement.
+
+## Architect instructions and local diagram state
+
+- Test first that required `TurnInput.instructions` reaches the OpenAI Responses `instructions` field separately from `messages`, with no architecture state in provider input.
+- Keep persistent guidance in `ARCHITECT_INSTRUCTIONS` and the wiki plus opening request in hidden `INITIAL_PROMPT` context. Verify instructions on opening, follow-up, and retry turns without displaying them in the transcript.
+- Pass current architecture separately to `session.respond(input, currentArchitecture)` for local validation. Cover valid replacement, malformed update, and stale revision behavior. The diagram communicates model output; dragging changes presentation only.
+- Verify opening and follow-up network payloads in Chromium, Firefox, and WebKit; retain cancellation, accessibility, and graph interaction coverage.

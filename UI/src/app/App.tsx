@@ -5,7 +5,7 @@ import { createSession } from '../providers/session'
 import { ModelProvider, type Provider, type Message } from '../providers/types'
 import type { AppError } from '../providers/errors'
 import { initialState, reducer } from './state'
-import { INITIAL_PROMPT } from '../prompts'
+import { ARCHITECT_INSTRUCTIONS, INITIAL_PROMPT } from '../prompts'
 import { emptyArchitecture, type Architecture } from '../features/architecture/schema'
 import styles from './App.module.css'
 import Diagram from '../features/architecture/Diagram'
@@ -66,7 +66,7 @@ export default function App({ provider = defaultProvider }: { provider?: Provide
   }
   function respond(messages: Message[], architecture: Architecture) {
     dispatch({ type: 'start', messages })
-    run(session.respond({ messages, architecture }), result => {
+    run(session.respond({ instructions: ARCHITECT_INSTRUCTIONS, messages }, architecture), result => {
       setDraft(''); dispatch({ type: 'result', ...result }); composer.current?.focus()
     }, true)
   }

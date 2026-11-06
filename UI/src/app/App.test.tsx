@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import App from './App'
+import { ARCHITECT_INSTRUCTIONS, INITIAL_PROMPT } from '../prompts'
 describe('initial setup', () => {
   it('shows provider/key setup and an empty architecture, but no composer', () => {
     render(<App />)
@@ -77,6 +78,11 @@ describe('setup and conversation lifecycle', () => {
     expect(await screen.findByText('<script>bad()</script>')).toBeVisible()
     expect(screen.getAllByText('My custody needs')).toHaveLength(1)
     expect(document.querySelector('script')).toBeNull()
+    for (const [, input] of vi.mocked(provider.sendTurn).mock.calls) {
+      expect(input.instructions).toBeTruthy()
+      expect(input.instructions).toBe(ARCHITECT_INSTRUCTIONS)
+      expect(input).not.toHaveProperty('architecture')
+    }
   })
   it('stops a turn and ignores its late response', async () => {
     let resolve!: (value: TurnResult) => void
@@ -114,7 +120,10 @@ describe('automatic opening turn', () => {
     expect(provider.sendTurn).toHaveBeenCalledTimes(1)
     const opening = vi.mocked(provider.sendTurn).mock.calls[0][1].messages[0]
     expect(opening.role).toBe('user')
-    expect(opening.content).not.toBe('')
+    expect(opening.content).toBe(INITIAL_PROMPT)
+    expect(ARCHITECT_INSTRUCTIONS).toBeTruthy()
+    expect(INITIAL_PROMPT).not.toContain(ARCHITECT_INSTRUCTIONS)
+    expect(screen.queryByText(ARCHITECT_INSTRUCTIONS)).not.toBeInTheDocument()
     expect(screen.queryByText(opening.content)).not.toBeInTheDocument()
     rerender(<App provider={provider} />)
     expect(provider.sendTurn).toHaveBeenCalledTimes(1)
@@ -142,7 +151,9 @@ describe('automatic opening turn', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Opening failed')
     await user.click(screen.getByRole('button', { name: 'Retry response' }))
     await screen.findByText('Welcome after retry')
-    expect(vi.mocked(provider.sendTurn).mock.calls[1][1].messages).toEqual(vi.mocked(provider.sendTurn).mock.calls[0][1].messages)
+    expect(vi.mocked(provider.sendTurn).mock.calls[1][1]).toEqual(vi.mocked(provider.sendTurn).mock.calls[0][1])
+    expect(vi.mocked(provider.sendTurn).mock.calls[1][1].instructions).toBeTruthy()
+    expect(vi.mocked(provider.sendTurn).mock.calls[1][1].instructions).toBe(ARCHITECT_INSTRUCTIONS)
   })
   it('clears the session if authentication fails on the opening request', async () => {
     const provider = fake()
