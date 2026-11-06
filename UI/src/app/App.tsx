@@ -9,6 +9,7 @@ import { ARCHITECT_INSTRUCTIONS, INITIAL_PROMPT } from '../prompts'
 import { emptyArchitecture, type Architecture } from '../features/architecture/schema'
 import styles from './App.module.css'
 import Diagram from '../features/architecture/Diagram'
+import AssistantHtml from './AssistantHtml'
 
 const defaultProvider = createOpenAI(import.meta.env.VITE_OPENAI_MODEL ?? '')
 export default function App({ provider = defaultProvider }: { provider?: Provider }) {
@@ -23,23 +24,35 @@ export default function App({ provider = defaultProvider }: { provider?: Provide
   const connected = state.phase === 'ready' || state.phase === 'responding'
   const busy = state.phase === 'responding'
 
-  function cancel() { sequence.current++; active.current?.abort(); active.current = null }
+  function cancel() { session.cancel(); sequence.current++; active.current?.abort(); active.current = null }
   function disconnect(message?: string) {
     cancel(); session.clear(); setDraft(''); if (keyInput.current) keyInput.current.value = ''
     dispatch({ type: 'reset', error: message })
   }
+  useEffect(() => {
+    const unsubscribe = session.subscribe(event => {
+      if (event.turnId !== sequence.current) return
+      if (event.type === 'failed' && event.error.kind === 'authentication') {
+        session.clear(); setDraft('')
+      }
+      dispatch(event)
+      if (event.type === 'completed') { setDraft(''); composer.current?.focus() }
+    })
+    return unsubscribe
+  }, [session])
   useEffect(() => () => { sequence.current++; active.current?.abort(); session.clear() }, [session])
   useEffect(() => { if (connected) composer.current?.focus(); else keyInput.current?.focus() }, [connected])
 
-  useEffect(() => { if (transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight }, [state.messages, busy])
+  useEffect(() => { if (transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight }, [state.transcript, busy])
 
-  function run<A>(effect: Effect.Effect<A, AppError, ModelProvider>, success: (value: A) => void, authenticated = connected) {
+  function run<A>(effect: Effect.Effect<A, AppError, ModelProvider>, success: (value: A) => void, authenticated = connected, eventDriven = false) {
     const id = ++sequence.current
     const controller = new AbortController(); active.current = controller
     void Effect.runPromise(effect.pipe(Effect.provideService(ModelProvider, provider), Effect.either), { signal: controller.signal }).then(result => {
       if (id !== sequence.current || controller.signal.aborted) return
       active.current = null
       if (Either.isRight(result)) success(result.right)
+      else if (eventDriven) return
       else if (result.left.kind === 'authentication' && authenticated) disconnect(result.left.message)
       else dispatch({ type: 'failure', message: result.left.message })
     }).catch(() => {
@@ -65,10 +78,7 @@ export default function App({ provider = defaultProvider }: { provider?: Provide
     respond(messages, state.architecture)
   }
   function respond(messages: Message[], architecture: Architecture) {
-    dispatch({ type: 'start', messages })
-    run(session.respond({ instructions: ARCHITECT_INSTRUCTIONS, messages }, architecture), result => {
-      setDraft(''); dispatch({ type: 'result', ...result }); composer.current?.focus()
-    }, true)
+    run(session.respond({ instructions: ARCHITECT_INSTRUCTIONS, messages }, architecture, sequence.current + 1), () => {}, true, true)
   }
 
   return <main className={styles.shell}>
@@ -92,7 +102,7 @@ export default function App({ provider = defaultProvider }: { provider?: Provide
         <div className={styles.chatHeader}><div><span className={styles.online} />OpenAI <span className={styles.muted}> / Architect session</span></div><button className={styles.textButton} onClick={() => disconnect()}>Disconnect</button></div>
         <div ref={transcript} className={styles.transcript} role="log" aria-label="Conversation" aria-live="polite">
           <div className={styles.introduction}><span className={styles.eyebrow}>LET’S DESIGN YOUR CUSTODY</span><h1>Your custody conversation</h1></div>
-          {state.messages.map((message, index) => message.origin === 'app' ? null : <article className={message.role === 'user' ? styles.userMessage : styles.assistantMessage} key={index}><span className={styles.messageRole}>{message.role === 'user' ? 'YOU' : 'ARCHITECT'}</span><p>{message.content}</p></article>)}
+          {state.transcript.map((message, index) => message.origin === 'app' ? null : <article className={message.role === 'user' ? styles.userMessage : styles.assistantMessage} key={index}><span className={styles.messageRole}>{message.role === 'user' ? 'YOU' : 'ARCHITECT'}</span>{message.role === 'assistant' ? <AssistantHtml html={message.content} /> : <p>{message.content}</p>}</article>)}
           {busy && <p role="status" className={styles.thinking}>Considering your requirements…</p>}
         </div>
         <div className={styles.composerArea}>
@@ -102,7 +112,7 @@ export default function App({ provider = defaultProvider }: { provider?: Provide
           <form className={styles.composer} onSubmit={event => { event.preventDefault(); send() }}>
             <label htmlFor="message" className={styles.srOnly}>Message</label>
             <textarea id="message" ref={composer} value={draft} readOnly={busy} placeholder="Describe your needs or ask a question…" rows={3} maxLength={20000} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send() } }} />
-            {busy ? <button type="button" className={styles.primary} onClick={() => { cancel(); dispatch({ type: 'stop' }) }}>Stop response</button> : <button className={styles.primary} aria-label="Send message">Send <span aria-hidden="true">↑</span></button>}
+            {busy ? <button type="button" className={styles.primary} onClick={cancel}>Stop response</button> : <button className={styles.primary} aria-label="Send message">Send <span aria-hidden="true">↑</span></button>}
           </form><p className={styles.composerHint}>Enter to send · Shift + Enter for a new line</p>
         </div>
       </div>}

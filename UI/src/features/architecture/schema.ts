@@ -17,5 +17,3 @@ export const acceptUpdate = (current: Architecture, candidate: unknown) => Effec
   if (update.baseRevision !== current.revision) return yield* Effect.fail(error('architecture', 'The architecture update is out of date. Your previous diagram is unchanged.'))
   return { revision: current.revision + 1, nodes: update.nodes, edges: update.edges }
 })
-// Provider schema uses the structural shape. Cross-reference and revision checks stay local.
-export const turnJsonSchema = z.toJSONSchema(z.object({ text: z.string().min(1).max(20000), architecture: updateSchema.nullable() }).strict())

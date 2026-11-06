@@ -31,9 +31,9 @@ describe('OpenAI adapter', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
   it('uses Responses structured output and retains text with malformed architecture data', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify({ text: 'A proposal', architecture: { broken: true } })))
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify({ message: { html: 'A proposal' }, architecture: { broken: true } })))
     const result = await Effect.runPromise(createOpenAI('gpt-6-luna', fetcher).sendTurn('fake', input))
-    expect(result).toEqual({ text: 'A proposal', architecture: { broken: true } })
+    expect(result).toEqual({ message: { html: 'A proposal' }, architecture: { broken: true } })
     const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body))
     expect(body.model).toBe('gpt-6-luna')
     expect(body.store).toBe(false)
@@ -54,10 +54,38 @@ describe('OpenAI adapter', () => {
 })
 
 it('sends instructions separately from the shared opening context', async () => {
-  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify({ text: 'Hello', architecture: null })))
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify({ message: { html: 'Hello' }, architecture: null })))
   await Effect.runPromise(createOpenAI('model', fetcher).sendTurn('fake', { ...input, messages: [{ role: 'user', content: INITIAL_PROMPT, origin: 'app' }] }))
   const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body))
   expect(body.instructions).toBe(input.instructions)
   expect(body).not.toHaveProperty('architecture')
   expect(body.input).toEqual([{ role: 'user', content: INITIAL_PROMPT }])
+})
+
+it.each([
+  { message: { html: '<p>Hello</p>' }, architecture: null },
+  { message: null, architecture: { baseRevision: 0, nodes: [], edges: [] } },
+  { message: { html: '<p>Hello</p>' }, architecture: { baseRevision: 0, nodes: [], edges: [] } },
+])('accepts independently optional response content: %j', async value => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify(value)))
+  expect(await Effect.runPromise(createOpenAI('model', fetcher).sendTurn('fake', input))).toEqual(value)
+})
+it.each([
+  { message: null, architecture: null }, {}, { message: { html: '' }, architecture: null },
+  { message: { html: 'Hello' } }, { message: { html: 'Hello' }, architecture: null, command: 'execute' },
+])('rejects empty or unsupported response envelopes: %j', async value => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify(value)))
+  const result = await Effect.runPromise(Effect.either(createOpenAI('model', fetcher).sendTurn('fake', input)))
+  expect(Either.isLeft(result) && result.left.kind).toBe('response')
+})
+
+it('sends the accepted revision as developer context without modifying conversation history', async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(JSON.stringify({ message: { html: 'Hello' }, architecture: null })))
+  await Effect.runPromise(createOpenAI('model', fetcher).sendTurn('fake', { ...input, architectureRevision: 4 }))
+  const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body))
+  expect(body.instructions).toBe(input.instructions)
+  expect(body.input[0]).toEqual(message)
+  expect(body.input[1]).toMatchObject({ role: 'developer', content: expect.stringContaining('revision is 4') })
+  expect(body.text.format.schema.required).toEqual(['message', 'architecture'])
+  expect(body.text.format.schema.additionalProperties).toBe(false)
 })

@@ -16,7 +16,7 @@ Use the following stack for implementation under `/UI`. Resolve compatible stabl
 | Diagram | React Flow (`@xyflow/react`) | Controlled nodes/edges, selection, dragging, pan, zoom, and fit-to-view |
 | Runtime validation | Zod | Validate provider turn results and architecture documents; infer TypeScript data types |
 | Provider transport | Native `fetch` and `AbortController` behind the provider adapter | Authenticated requests and cancellation |
-| Message rendering | React text rendering | Display plain text with preserved whitespace; no HTML or Markdown parser needed |
+| Message rendering | React text rendering and DOMPurify | Render user text literally; render assistant HTML through a small tag, attribute, and HTTP(S) URL allowlist |
 | Unit/component tests | Vitest, jsdom, React Testing Library, `user-event`, and `jest-dom` | Reducer/schema tests and user-facing form/chat behavior |
 | Browser tests | Playwright Test | Real layout, graph interactions, and complete user journeys |
 | Accessibility checks | `@axe-core/playwright` | Automated checks alongside manual keyboard and focus inspection |
@@ -106,7 +106,7 @@ Exit: chat can be entered only after a successful validation response, with dete
 
 Write tests for empty-message rejection, visible user content, pending assistant feedback, a successful assistant response, and the correct conversation/model passed to the adapter. Cover Enter, Shift+Enter, and IME composition. Verify that one active turn prevents a second concurrent send.
 
-Implement transcript, composer, and nonstreaming turn handling. Test missing model configuration and a valid key without model access as separate failures. Verify malicious HTML in a response renders inertly.
+Implement transcript, composer, and nonstreaming turn handling. Test missing model configuration and a valid key without model access as separate failures. Verify assistant formatting renders semantically, malicious HTML is stripped, and user HTML remains literal text.
 
 Exit: a mocked architect turn works through the UI using the active session and configured model.
 
@@ -156,7 +156,19 @@ If the user elects to perform a live smoke test, use their key only in the runni
 
 ## Architect instructions and local diagram state
 
-- Test first that required `TurnInput.instructions` reaches the OpenAI Responses `instructions` field separately from `messages`, with no architecture state in provider input.
+- Test first that required `TurnInput.instructions` reaches the OpenAI Responses `instructions` field separately from `messages`, with accepted revision context in a separate developer message and no current graph or presentation state in provider input.
 - Keep persistent guidance in `ARCHITECT_INSTRUCTIONS` and the wiki plus opening request in hidden `INITIAL_PROMPT` context. Verify instructions on opening, follow-up, and retry turns without displaying them in the transcript.
-- Pass current architecture separately to `session.respond(input, currentArchitecture)` for local validation. Cover valid replacement, malformed update, and stale revision behavior. The diagram communicates model output; dragging changes presentation only.
+- Pass current architecture separately to `session.respond(input, currentArchitecture, turnId)` for local validation. Cover valid replacement, malformed update, and stale revision behavior. The diagram communicates model output; dragging changes presentation only.
 - Verify opening and follow-up network payloads in Chromium, Firefox, and WebKit; retain cancellation, accessibility, and graph interaction coverage.
+
+
+## Structured responses and event delivery
+
+1. Observe failing adapter and session tests for the new nullable `message`/`architecture` envelope and `subscribe` API. Cover message-only, diagram-only, combined output, missing fields, empty envelopes, malformed JSON, and unknown fields. Keep graph validation independent from valid conversational HTML.
+2. Implement the dedicated response schema, prompt instructions, and strict provider schema. Verify the accepted revision travels as a developer context message on opening, follow-up, and retry requests, without modifying persistent architect instructions.
+3. Make `respond` complete with void and publish typed lifecycle and response events. Verify content precedes completion, a failure is reported once, unsubscribe removes a listener, and late results after stop or disconnect publish no content. Preserve Effect interruption at the UI boundary.
+4. Keep provider history separate from transcript content. Verify diagram-only turns finish without empty bubbles and remain in subsequent history. Verify retries do not duplicate user messages, rejected updates keep the accepted revision, and duplicate or obsolete events cannot change reducer state. Exercise subscription cleanup under React StrictMode.
+5. Test the assistant HTML allowlist: formatting and safe links survive, while scripts, images, SVG, frames, forms, event handlers, inline styles, and unsafe or relative URLs do not. Check a readable fallback for fully removed content; user text remains literal.
+6. Exercise HTML, diagram-only replacement and explicit clearing in Chromium, Firefox, and WebKit. Check keyboard focus, safe-link tab navigation, axe results, and provider history/revision context. In Chromium, verify surviving nodes retain dragged positions across replacements.
+
+Exit: all static checks, unit/component tests, production build, and mocked production browser journeys pass. Live-provider behavior remains a separate manual check with real credentials.

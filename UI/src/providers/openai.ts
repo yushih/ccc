@@ -1,11 +1,11 @@
 import { Effect } from 'effect'
 import { z } from 'zod'
-import { turnJsonSchema } from '../features/architecture/schema'
+import { responseSchema, turnJsonSchema } from './response'
+import { architectureContext } from '../prompts'
 import { error } from './errors'
 import type { Provider } from './types'
 
 const envelope = z.object({ status: z.literal('completed'), output: z.array(z.object({ type: z.string(), content: z.array(z.object({ type: z.string(), text: z.string().optional() })).optional() })) })
-const turn = z.object({ text: z.string().trim().min(1).max(20000), architecture: z.unknown().optional() })
 const responseError = () => error('response', 'OpenAI returned an incomplete or unreadable response. Please retry.')
 
 export function createOpenAI(model: string, fetcher: typeof fetch = (...args) => fetch(...args)): Provider {
@@ -35,7 +35,8 @@ export function createOpenAI(model: string, fetcher: typeof fetch = (...args) =>
       if (!model.trim()) return yield* Effect.fail(error('configuration', 'No model is configured. Set VITE_OPENAI_MODEL and restart the application.'))
       const body = yield* Effect.try({
         try: () => JSON.stringify({ model, store: false, instructions: input.instructions,
-          input: input.messages.map(({ role, content }) => ({ role, content })), text: { format: { type: 'json_schema', name: 'architect_turn', strict: true, schema: turnJsonSchema } },
+          input: [...input.messages.map(({ role, content }) => ({ role, content })),
+            ...(input.architectureRevision === undefined ? [] : [{ role: 'developer', content: architectureContext(input.architectureRevision) }])], text: { format: { type: 'json_schema', name: 'architect_turn', strict: true, schema: turnJsonSchema } },
         }), catch: responseError,
       })
       const response = yield* request(key, 'responses', body)
@@ -44,7 +45,7 @@ export function createOpenAI(model: string, fetcher: typeof fetch = (...args) =>
       const content = parsed.output.filter(item => item.type === 'message').flatMap(item => item.content ?? [])
       if (content.some(item => item.type === 'refusal')) return yield* Effect.fail(error('response', 'OpenAI declined this request. Revise your message and try again.'))
       const text = content.filter(item => item.type === 'output_text').map(item => item.text ?? '').join('')
-      return yield* Effect.try({ try: () => turn.parse(JSON.parse(text)), catch: responseError })
+      return yield* Effect.try({ try: () => responseSchema.parse(JSON.parse(text)), catch: responseError })
     }).pipe(Effect.timeoutFail({ duration: '120 seconds', onTimeout: () => error('timeout', 'The response timed out. Please retry.') })),
   }
 }

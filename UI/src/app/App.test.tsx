@@ -19,7 +19,7 @@ import { Effect } from 'effect'
 import { vi } from 'vitest'
 import type { Provider, TurnResult } from '../providers/types'
 import { error } from '../providers/errors'
-const fake = (): Provider => ({ validateCredentials: vi.fn(() => Effect.void), sendTurn: vi.fn(() => Effect.succeed({ text: 'What are your recovery requirements?', architecture: null })).mockReturnValueOnce(Effect.succeed({ text: 'Welcome to CCC.', architecture: null })) })
+const fake = (): Provider => ({ validateCredentials: vi.fn(() => Effect.void), sendTurn: vi.fn(() => Effect.succeed({ message: { html: 'What are your recovery requirements?' }, architecture: null })).mockReturnValueOnce(Effect.succeed({ message: { html: 'Welcome to CCC.' }, architecture: null })) })
 async function connect(provider = fake()) {
   const user = userEvent.setup()
   const view = render(<App provider={provider} />)
@@ -70,12 +70,12 @@ describe('setup and conversation lifecycle', () => {
   })
   it('sends once, renders inert text, and retries without duplicating the user message', async () => {
     const provider = fake()
-    vi.mocked(provider.sendTurn).mockReturnValueOnce(Effect.fail(error('network', 'Try again'))).mockReturnValueOnce(Effect.succeed({ text: '<script>bad()</script>' }))
+    vi.mocked(provider.sendTurn).mockReturnValueOnce(Effect.fail(error('network', 'Try again'))).mockReturnValueOnce(Effect.succeed({ message: { html: '<p>Safe reply</p><script>bad()</script>' }, architecture: null }))
     const { user } = await connect(provider)
     await user.type(screen.getByLabelText('Message'), 'My custody needs{Enter}')
     expect(await screen.findByRole('alert')).toHaveTextContent('Try again')
     await user.click(screen.getByRole('button', { name: 'Retry response' }))
-    expect(await screen.findByText('<script>bad()</script>')).toBeVisible()
+    expect(await screen.findByText('Safe reply')).toBeVisible()
     expect(screen.getAllByText('My custody needs')).toHaveLength(1)
     expect(document.querySelector('script')).toBeNull()
     for (const [, input] of vi.mocked(provider.sendTurn).mock.calls) {
@@ -91,7 +91,7 @@ describe('setup and conversation lifecycle', () => {
     const { user } = await connect(provider)
     await user.type(screen.getByLabelText('Message'), 'A question{Enter}')
     await user.click(screen.getByRole('button', { name: 'Stop response' }))
-    await act(async () => resolve({ text: 'Late response' }))
+    await act(async () => resolve({ message: { html: 'Late response' }, architecture: null }))
     expect(screen.queryByText('Late response')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
   })
@@ -130,7 +130,7 @@ describe('automatic opening turn', () => {
     await user.type(screen.getByLabelText('Message'), 'My needs{Enter}')
     await waitFor(() => expect(provider.sendTurn).toHaveBeenCalledTimes(2))
     expect(vi.mocked(provider.sendTurn).mock.calls[1][1].messages).toEqual([
-      opening, { role: 'assistant', content: 'Welcome to CCC.' }, { role: 'user', content: 'My needs' },
+      opening, { role: 'assistant', content: JSON.stringify({ message: { html: 'Welcome to CCC.' }, architecture: null }) }, { role: 'user', content: 'My needs' },
     ])
   })
   it('does not start a conversation when validation fails', async () => {
@@ -144,7 +144,7 @@ describe('automatic opening turn', () => {
   })
   it('retries the opening prompt without duplication', async () => {
     const provider = fake()
-    vi.mocked(provider.sendTurn).mockReset().mockReturnValueOnce(Effect.fail(error('network', 'Opening failed'))).mockReturnValue(Effect.succeed({ text: 'Welcome after retry' }))
+    vi.mocked(provider.sendTurn).mockReset().mockReturnValueOnce(Effect.fail(error('network', 'Opening failed'))).mockReturnValue(Effect.succeed({ message: { html: 'Welcome after retry' }, architecture: null }))
     const user = userEvent.setup(); render(<App provider={provider} />)
     await user.type(screen.getByLabelText('API key'), 'fake')
     await user.click(screen.getByRole('button', { name: 'Connect to OpenAI' }))
@@ -175,8 +175,46 @@ describe('automatic opening turn', () => {
     await screen.findByRole('button', { name: 'Stop response' })
     expect(screen.getByLabelText('Message')).toHaveAttribute('readonly')
     await user.click(screen.getByRole('button', { name: 'Disconnect' }))
-    await act(async () => resolve({ text: 'Obsolete greeting' }))
+    await act(async () => resolve({ message: { html: 'Obsolete greeting' }, architecture: null }))
     expect(screen.queryByText('Obsolete greeting')).not.toBeInTheDocument()
     expect(screen.getByLabelText('API key')).toHaveValue('')
   })
+})
+
+it('applies diagram-only output without a bubble and retains it in model history', async () => {
+  const provider = fake()
+  const diagramOnly = { message: null, architecture: { baseRevision: 0, nodes: [], edges: [] } }
+  vi.mocked(provider.sendTurn).mockReturnValueOnce(Effect.succeed(diagramOnly))
+  const { user } = await connect(provider)
+  await user.type(screen.getByLabelText('Message'), 'Clear the diagram{Enter}')
+  await screen.findByText('REV 01')
+  expect(screen.getAllByText('ARCHITECT', { exact: true })).toHaveLength(2) // Header plus opening message.
+  expect(screen.getByLabelText('Message')).toHaveValue('')
+  expect(screen.getByLabelText('Message')).toHaveFocus()
+  await user.type(screen.getByLabelText('Message'), 'Explain that{Enter}')
+  await screen.findByText('What are your recovery requirements?')
+  const next = vi.mocked(provider.sendTurn).mock.calls[2][1]
+  expect(next.messages).toContainEqual({ role: 'assistant', content: JSON.stringify(diagramOnly) })
+  expect(next.architectureRevision).toBe(1)
+  expect(screen.getByText('REV 01')).toBeVisible()
+})
+
+it('renders user input literally while rendering assistant formatting', async () => {
+  const provider = fake()
+  vi.mocked(provider.sendTurn).mockReturnValueOnce(Effect.succeed({ message: { html: '<p>Use <strong>independent</strong> backups.</p>' }, architecture: null }))
+  const { user } = await connect(provider)
+  await user.type(screen.getByLabelText('Message'), '<strong>My needs</strong>{Enter}')
+  expect(await screen.findByText('independent')).toHaveProperty('tagName', 'STRONG')
+  expect(screen.getByText('<strong>My needs</strong>')).toHaveProperty('tagName', 'P')
+})
+
+it('does not duplicate event subscriptions under StrictMode', async () => {
+  const { StrictMode } = await import('react')
+  const provider = fake()
+  const user = userEvent.setup()
+  render(<StrictMode><App provider={provider} /></StrictMode>)
+  await user.type(screen.getByLabelText('API key'), 'fake')
+  await user.click(screen.getByRole('button', { name: 'Connect to OpenAI' }))
+  expect(await screen.findAllByText('Welcome to CCC.')).toHaveLength(1)
+  expect(provider.sendTurn).toHaveBeenCalledTimes(1)
 })

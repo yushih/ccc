@@ -1,11 +1,11 @@
 import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { ARCHITECT_INSTRUCTIONS, INITIAL_PROMPT } from '../src/prompts'
+import { ARCHITECT_INSTRUCTIONS, INITIAL_PROMPT, architectureContext } from '../src/prompts'
 const graph = { baseRevision: 0, nodes: [
   { id: 'owner', kind: 'person', label: 'Owner', description: 'Approves transfers' },
   { id: 'wallet', kind: 'wallet', label: 'Hardware wallet', description: 'Keeps signing material offline' },
 ], edges: [{ id: 'approval', source: 'owner', target: 'wallet', label: 'Approves' }] }
-const result = (text: string, architecture: unknown = graph) => ({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ text, architecture }) }] }] })
+const result = (text: string | null, architecture: unknown = graph) => ({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ message: text === null ? null : { html: text }, architecture }) }] }] })
 async function mockNetwork(page: Page) {
   await page.route('**/*', route => {
     const url = new URL(route.request().url())
@@ -15,7 +15,7 @@ async function mockNetwork(page: Page) {
   await page.route('https://api.openai.com/v1/models', route => route.fulfill({ json: { data: [{ id: 'gpt-6-luna' }] } }))
   await page.route('https://api.openai.com/v1/responses', route => {
     const input = route.request().postDataJSON().input
-    const opening = input.length === 1 && input[0].content === INITIAL_PROMPT
+    const opening = input.filter((item: { role: string }) => item.role !== 'developer').length === 1 && input[0].content === INITIAL_PROMPT
     return route.fulfill({ json: opening ? result('Welcome to CCC.', null) : result('Let’s start with an offline signer.') })
   })
 }
@@ -134,7 +134,7 @@ test('validation automatically sends the shared opening prompt and retains it in
   expect(requests[0].instructions).toBe(ARCHITECT_INSTRUCTIONS)
   expect(requests[0]).not.toHaveProperty('architecture')
   await expect(page.getByText(ARCHITECT_INSTRUCTIONS, { exact: true })).toHaveCount(0)
-  expect(requests[0].input).toEqual([{ role: 'user', content: INITIAL_PROMPT }])
+  expect(requests[0].input).toEqual([{ role: 'user', content: INITIAL_PROMPT }, { role: 'developer', content: architectureContext(0) }])
   await expect(page.getByText(INITIAL_PROMPT, { exact: true })).toHaveCount(0)
   await send(page)
   await expect(page.getByText('Let’s start with an offline signer.')).toBeVisible()
@@ -142,7 +142,61 @@ test('validation automatically sends the shared opening prompt and retains it in
   expect(requests[1]).not.toHaveProperty('architecture')
   expect(requests[1].input).toEqual([
     { role: 'user', content: INITIAL_PROMPT },
-    { role: 'assistant', content: 'Welcome to CCC.' },
+    { role: 'assistant', content: JSON.stringify({ message: { html: 'Welcome to CCC.' }, architecture: null }) },
     { role: 'user', content: 'I need offline custody' },
+    { role: 'developer', content: architectureContext(0) },
   ])
+})
+
+
+test('HTML and diagram-only responses preserve history, keyboard access and diagram semantics', async ({ page }, testInfo) => {
+  await connect(page)
+  await page.route('https://api.openai.com/v1/responses', route => route.fulfill({ json: result('<p>Use <strong>independent</strong> backups.</p><ul><li>Keep them separate</li></ul><a href="https://example.com">Reference</a><a href="javascript:alert(1)">Unsafe</a><script>window.injected=true</script><img src="https://example.com/tracker" onerror="window.injected=true">', graph) }))
+  await send(page, '<em>My requirements</em>')
+  await expect(page.locator('[role="log"] strong')).toHaveText('independent')
+  await expect(page.getByText('<em>My requirements</em>', { exact: true })).toBeVisible()
+  await expect(page.locator('[role="log"] script, [role="log"] img, [role="log"] [onerror]')).toHaveCount(0)
+  await expect(page.getByText('Unsafe', { exact: true })).not.toHaveAttribute('href')
+  const link = page.getByRole('link', { name: 'Reference', exact: true })
+  await page.getByLabel('Message', { exact: true }).focus()
+  await page.keyboard.press('Shift+Tab')
+  await expect(link).toBeFocused()
+  await page.screenshot({ path: testInfo.outputPath('html-focus.png') })
+  expect(await link.evaluate(el => getComputedStyle(el).outlineStyle)).not.toBe('none')
+  await page.keyboard.press('Tab')
+  await expect(page.getByLabel('Message', { exact: true })).toBeFocused()
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+  const articles = page.locator('[role="log"] article')
+  const count = await articles.count()
+  await page.route('https://api.openai.com/v1/responses', route => route.fulfill({ json: result(null, { baseRevision: 1, nodes: [], edges: [] }) }))
+  await send(page, 'Clear the diagram')
+  await expect(page.getByText('REV 02')).toBeVisible()
+  await expect(page.getByText('Your architecture starts here')).toBeVisible()
+  await expect(articles).toHaveCount(count + 1)
+  await expect(page.getByLabel('Message', { exact: true })).toBeFocused()
+  await expect(page.getByLabel('Message', { exact: true })).toHaveValue('')
+  let nextInput: { role: string; content: string }[] = []
+  await page.route('https://api.openai.com/v1/responses', route => {
+    nextInput = route.request().postDataJSON().input
+    return route.fulfill({ json: result('<p>The diagram is cleared.</p>', null) })
+  })
+  await send(page, 'Explain that')
+  await expect(page.getByText('The diagram is cleared.', { exact: true })).toBeVisible()
+  expect(nextInput).toContainEqual({ role: 'assistant', content: JSON.stringify({ message: null, architecture: { baseRevision: 1, nodes: [], edges: [] } }) })
+  expect(nextInput.at(-1)).toEqual({ role: 'developer', content: architectureContext(2) })
+})
+
+test('diagram replacements retain dragged positions', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Pointer geometry is covered in Chromium')
+  await connect(page); await send(page)
+  const node = page.locator('.react-flow__node[data-id="owner"]')
+  await expect(node).toBeVisible()
+  const box = (await node.boundingBox())!
+  await page.mouse.move(box.x + 50, box.y + 20); await page.mouse.down()
+  await page.mouse.move(box.x + 130, box.y + 100, { steps: 8 }); await page.mouse.up()
+  const position = await node.evaluate(el => (el as HTMLElement).style.transform)
+  await page.route('https://api.openai.com/v1/responses', route => route.fulfill({ json: result(null, { ...graph, baseRevision: 1 }) }))
+  await send(page, 'Keep this design')
+  await expect(page.getByText('REV 02')).toBeVisible()
+  expect(await node.evaluate(el => (el as HTMLElement).style.transform)).toBe(position)
 })

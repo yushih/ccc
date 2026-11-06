@@ -42,7 +42,7 @@ For a local production preview, run `npm run build` followed by `npm run preview
 - `src/test` and colocated tests: network-denying setup and unit/component behavior tests.
 - `e2e`: complete browser journeys and accessibility checks.
 
-Expected thrown exceptions and promise rejections are wrapped with `Effect.try` / `Effect.tryPromise` at integration boundaries. The UI aborts the running Effect and ignores obsolete completions when a response is stopped or a session ends. Graph validation failures preserve valid assistant text and the last accepted architecture.
+Expected thrown exceptions and promise rejections are wrapped with `Effect.try` / `Effect.tryPromise` at integration boundaries. The UI aborts the running Effect and ignores obsolete completions when a response is stopped or a session ends. Graph validation failures preserve valid assistant HTML and the last accepted architecture. Structured responses may contain a conversational HTML message, a diagram replacement, or both. The session publishes typed events, and the UI sanitizes assistant HTML with DOMPurify. Provider history retains every response envelope, including diagram-only turns, separately from the visible transcript.
 
 ## Verification limits
 
