@@ -172,3 +172,9 @@ If the user elects to perform a live smoke test, use their key only in the runni
 6. Exercise HTML, diagram-only replacement and explicit clearing in Chromium, Firefox, and WebKit. Check keyboard focus, safe-link tab navigation, axe results, and provider history/revision context. In Chromium, verify surviving nodes retain dragged positions across replacements.
 
 Exit: all static checks, unit/component tests, production build, and mocked production browser journeys pass. Live-provider behavior remains a separate manual check with real credentials.
+
+## Public model configuration regression
+
+- Test Vite development and production configuration from an isolated fresh checkout with no shell or local override: both must load the public default from the checked-in `.env`. Verify `.env.local` and deployment environment overrides still win.
+- Render App with its real adapter and intercepted fetch calls: credential validation must lead to an opening response using the configured model.
+- Build and run production browser journeys without CI or Playwright injecting a model. This prevents test-only configuration from hiding a broken fresh checkout.
